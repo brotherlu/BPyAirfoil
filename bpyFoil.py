@@ -25,17 +25,18 @@ a surface with the points
 """
 
 import bpy
+import re
 from bpy.types import Operator, Panel
 from bpy.props import StringProperty, IntProperty
 from mathutils import Vector
 
-bl_info =   {	
+bl_info = 	{	
 			'name':'Blender Airfoil Importer',
 			'category':'Object',
 			'author':'Louay Cheikh',
 			'version':(0,1),
 			'blender':(2,65,0),
-			'location':'View 3D > Add > Surface'
+			'location':'Search Menu'
 			}
 
 def MakePolyLine(objname, curvename, cList):
@@ -58,6 +59,9 @@ def MakePolyLine(objname, curvename, cList):
 		x, y, z = cList[num]  
 		polyline.points[num].co = (x, y, z, w)
 
+def MakeSurface(objname,curvename,cList):
+	pass
+
 class bpyAirfoil(Operator):
 	""" Addon to import airfoil Dat files """
 	bl_idname = "object.bpyairfoil"
@@ -65,7 +69,6 @@ class bpyAirfoil(Operator):
 	bl_options = {'REGISTER','UNDO'}
 	
 	FileName = StringProperty(name="Filename", subtype="FILE_PATH", default="/tmp\\", description="Dat file location")
-	LineNumber = IntProperty(name="Line One", default=3, min=0, description="First Line of the Data Points")
 
 	def execute(self, context):
 		""" Import """
@@ -81,13 +84,19 @@ class bpyAirfoil(Operator):
 		# Extract the Airfoil Name
 		FoilName = data[0]
 
-		# Extract the datapoints and trim the ends of the file
-		FoilPoints = [p.strip().split(' ') for p in data[self.LineNumber:]]
+		# Create the regexp for finding the data
+		r = re.compile('[.\S]*\.[0-9]*')
 
-		# Convert the string points to floats
-		FoilCoords = [Vector([float(p[0]),0,float(p[-1])]) for p in FoilPoints if p[0] or p[-1] != '']
+		# Create the coordintes from the regler exp
+		FoilCoords = [r.findall(x) for x in data[1:]]
+
+		# Convert the strings to Floats
+		FoilPoints = [(float(x[0]),0,float(x[1])) for x in FoilCoords if len(x)==2 ]
+
+		# Ensure the First point is not the Point Count that some DAT files include 
+		if FoilPoints[0][0]>1: FoilPoints.remove(FoilPoints[0])
 		
-		MakePolyLine(FoilName,FoilName,FoilCoords)
+		MakePolyLine(FoilName,FoilName,FoilPoints)
 		
 		return {'FINISHED'}
 
