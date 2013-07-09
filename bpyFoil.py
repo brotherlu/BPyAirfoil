@@ -34,7 +34,7 @@ bl_info = 	{
 			'name':'Blender Airfoil Importer',
 			'category':'Object',
 			'author':'Louay Cheikh',
-			'version':(0,1),
+			'version':(0,2),
 			'blender':(2,65,0),
 			'location':'Search Menu'
 			}
