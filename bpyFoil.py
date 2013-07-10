@@ -35,7 +35,7 @@ bl_info = 	{
 			'category':'Object',
 			'author':'Louay Cheikh',
 			'version':(0,4),
-			'blender':(2,65,0),
+			'blender':(2,67,0),
 			'location':'Search Menu'
 			}
 
