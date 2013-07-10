@@ -27,17 +27,23 @@ a surface with the points
 import bpy
 import re
 from bpy.types import Operator, Panel
-from bpy.props import StringProperty, IntProperty
+from bpy.props import StringProperty, BoolProperty
 from mathutils import Vector
 
 bl_info = 	{	
 			'name':'Blender Airfoil Importer',
 			'category':'Object',
 			'author':'Louay Cheikh',
-			'version':(0,2),
+			'version':(0,3),
 			'blender':(2,65,0),
 			'location':'Search Menu'
 			}
+
+def SelectObj(ObjName):
+	bpy.ops.object.select_all(action='SELECT')
+	Obj = bpy.data.objects.get(ObjName)
+	Obj.select = True
+	bpy.context.scene.objects.active = Obj
 
 def MakePolyLine(objname, curvename, cList):
 	"""
@@ -59,9 +65,6 @@ def MakePolyLine(objname, curvename, cList):
 		x, y, z = cList[num]  
 		polyline.points[num].co = (x, y, z, w)
 
-def MakeSurface(objname,curvename,cList):
-	pass
-
 class bpyAirfoil(Operator):
 	""" Addon to import airfoil Dat files """
 	bl_idname = "object.bpyairfoil"
@@ -69,6 +72,7 @@ class bpyAirfoil(Operator):
 	bl_options = {'REGISTER','UNDO'}
 	
 	FileName = StringProperty(name="Filename", subtype="FILE_PATH", default="/tmp\\", description="Dat file location")
+	Mesh_choice = BoolProperty(name="Import as Mesh")
 
 	def execute(self, context):
 		""" Import """
@@ -96,7 +100,14 @@ class bpyAirfoil(Operator):
 		# Ensure the First point is not the Point Count that some DAT files include 
 		if FoilPoints[0][0]>1: FoilPoints.remove(FoilPoints[0])
 		
+		# Generate the Polyline
 		MakePolyLine(FoilName,FoilName,FoilPoints)
+		
+		# Select Object
+		SelectObj(FoilName)
+		
+		if self.Mesh_choice:
+			bpy.ops.object.convert(target='MESH',keep_original=False)
 		
 		return {'FINISHED'}
 
