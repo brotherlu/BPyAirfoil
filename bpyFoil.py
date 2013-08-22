@@ -32,9 +32,9 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,6),
+            'version':(0,7),
             'blender':(2,67,0),
-            'location':'Search Menu'
+            'location':'Tool Properties sidepanel'
             }
 
 def createMesh(objname,Vert,Edges=[],Faces=[]):
@@ -52,7 +52,7 @@ def getAirfoilName(filename):
         filename = f.readline()
         return filename.strip()
     except:
-        return "NOT FOUND"
+        return "UNDEFINED"
 
 # Airfoil Class
 
@@ -220,17 +220,35 @@ class bpyAirfoil(Operator):
         sce = context.scene
         afl = sce.airfoil_collection
         
-        afl_sorted = sorted(afl,key=lambda x:x.loc_y)
+        afl_filter = [a for a in afl if a.use and a.file_name]
+        afl_sorted = sorted(afl_filter,key=lambda x:x.loc_y)
+        
+        verts = []
+        faces = []
         
         for F in afl_sorted:
-            if F.use:
-                FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution)
-                FF.processFoil()
-                F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
-                F.verts.pop()
-                F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
-                F.faces.append((0,1,len(F.verts)-1,0)) # Add Tip Triangle
+            FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution)
+            FF.processFoil()
+            F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
+            F.verts.pop()
+            verts.extend(F.verts)
+            F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
+            F.faces.append((0,1,len(F.verts)-1,0)) # Add Tip Triangle
+            if not sce.airfoil_blend:
                 createMesh(FF.FoilName,F.verts,Faces=F.faces)
+
+        if sce.airfoil_blend:
+            # Cap the first end of the airfoil
+            faces.extend(afl_sorted[0].faces)
+            # Cap the last airfoil
+            R = (len(afl_sorted)-1) * sce.airfoil_resolution * 2
+            faces.extend([(x+R,y+R,z+R,w+R) for x,y,z,w in afl_sorted[-1].faces])
+            # Create the blended surfaces between airfoils
+            airfoil_blending_faces = [(i+sce.airfoil_resolution*2*j,i+1+sce.airfoil_resolution*2*j,i+1+(j+1)*sce.airfoil_resolution*2,i+(j+1)*sce.airfoil_resolution*2) \
+            for j in range(len(afl_sorted)-1) \
+            for i in range(sce.airfoil_resolution*2-1)]
+            faces.extend(airfoil_blending_faces)
+            createMesh("Blended Airfoil",verts,Faces=faces)
 
         return {'FINISHED'}
 
@@ -277,6 +295,9 @@ class Airfoil_Panel(Panel):
         layout.label("Interpolation Resolution")
         row = layout.row(align=True)
         row.prop(scn,'airfoil_resolution')
+
+        row = layout.row(align=True)
+        row.prop(scn,'airfoil_blend')
         
         layout.label("Airfoil List")
         row = layout.row()
@@ -316,6 +337,7 @@ def register():
     bpy.types.Scene.airfoil_collection = CollectionProperty(type=AirfoilListItem)
     bpy.types.Scene.airfoil_collection_idx = IntProperty(min=-1, max=100, default=-1)
     bpy.types.Scene.airfoil_resolution = IntProperty(name="",default=250, min=10, max=1000)
+    bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils",default=False,description="Blend Airfoils into single wing")
     
     # Add Template_list methods
     bpy.utils.register_class(Airfoil_Collection_add)
