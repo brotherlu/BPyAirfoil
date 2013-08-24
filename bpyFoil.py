@@ -26,16 +26,18 @@ a surface with the points
 import bpy
 import re, random
 from bpy.types import Operator, Panel, PropertyGroup, UIList
-from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty
+from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty, EnumProperty
 
 bl_info =   {   
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,7),
+            'version':(0,7,5),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
+
+interp_method_list = [("p","Polynomial Interpolation","Polynomial Interpolation using a second order distribution of points (recommended)"),("l","Linear Interpolation","Interpolate using a linear distribution of points")]
 
 def createMesh(objname,Vert,Edges=[],Faces=[]):
     """Helper Function to Create Meshes"""
@@ -57,7 +59,7 @@ def getAirfoilName(filename):
 # Airfoil Class
 
 class AirFoil:
-    def __init__(self,FoilName,Resolution=250):
+    def __init__(self,FoilName,Resolution=250,interp_method="l"):
         
         FF = open(FoilName,'r')
         data = FF.readlines()
@@ -77,6 +79,7 @@ class AirFoil:
         self.__upper = []
         self.__lower = []
         self.__procPointsCount = Resolution
+        self.__interpolation_method = interp_method
     
     def __str__(self):
         return "Airfoil Process Object, Last Processed: %s" % (self.FoilName)
@@ -106,16 +109,15 @@ class AirFoil:
         self.__lower = self.__RawPoints[splitloc+1:]
         
         # Ensure each section starts at (0,0)->(1,0)
+        # NOTE: we do NOT SORT the points because we want to insure that the order is preserved
         if self.__upper[0][0] > self.__upper[-1][0]:
             self.__upper.reverse()
         if self.__lower[0][0] > self.__lower[-1][0]:
             self.__lower.reverse()
         
-        # Ensure that the foils are not reversed
-        testpoint = random.randint(0,min([len(self.__upper),len(self.__lower)])-1)
-        if self.__upper[testpoint][1] < self.__lower[testpoint][1]:
-            self.__upper , self.__lower = self.__lower , self.__upper
-        
+        if self.__upper[0][0] != 0: self.__upper.insert(0,(0.,0.))
+        if self.__lower[0][0] != 0: self.__lower.insert(0,(0.,0.))
+    
     def __hinterpolate(self):
         """Process of interpolation using piecewise hermite curve interpolation"""
         
@@ -124,8 +126,12 @@ class AirFoil:
         lowerint = []
         
         # Create points
-        xpointsU = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
-        xpointsL = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
+        if self.__interpolation_method == "l":
+            xpointsU = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
+            xpointsL = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
+        elif self.__interpolation_method == "p":
+            xpointsU = [x**2/float(self.__procPointsCount)**2 for x in range(self.__procPointsCount+1)]
+            xpointsL = [x**2/float(self.__procPointsCount)**2 for x in range(self.__procPointsCount+1)]
                 
         # Calculate secants
         uppersec = [(self.__upper[i+1][1]-self.__upper[i][1])/(self.__upper[i+1][0]-self.__upper[i][0]) for i in range(len(self.__upper)-1)]
@@ -193,7 +199,6 @@ class AirFoil:
         if lowerint[-1][0] != 1.0: lowerint.append((1.0,0.0))
 
         self.__ProcPoints = upperint + lowerint
-        
                     
     def getRawPoints(self):
         """Return Raw Points"""
@@ -227,7 +232,7 @@ class bpyAirfoil(Operator):
         faces = []
         
         for F in afl_sorted:
-            FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution)
+            FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution,interp_method=sce.airfoil_interpolation_method)
             FF.processFoil()
             F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
             F.verts.pop()
@@ -292,7 +297,11 @@ class Airfoil_Panel(Panel):
         layout = self.layout
         scn = context.scene
         
-        layout.label("Interpolation Resolution")
+        layout.label("Interpolation Method")
+        
+        row = layout.row(align=True)
+        row.prop(scn,'airfoil_interpolation_method')
+        
         row = layout.row(align=True)
         row.prop(scn,'airfoil_resolution')
 
@@ -336,8 +345,9 @@ def register():
     bpy.types.Scene.airfoil_collection_id = IntProperty()
     bpy.types.Scene.airfoil_collection = CollectionProperty(type=AirfoilListItem)
     bpy.types.Scene.airfoil_collection_idx = IntProperty(min=-1, max=100, default=-1)
-    bpy.types.Scene.airfoil_resolution = IntProperty(name="",default=250, min=10, max=1000)
+    bpy.types.Scene.airfoil_resolution = IntProperty(name="Resolution",default=100, min=10, max=1000)
     bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils",default=False,description="Blend Airfoils into single wing")
+    bpy.types.Scene.airfoil_interpolation_method = EnumProperty(name="",items=interp_method_list)
     
     # Add Template_list methods
     bpy.utils.register_class(Airfoil_Collection_add)
