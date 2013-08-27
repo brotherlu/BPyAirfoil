@@ -32,7 +32,7 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,7,5),
+            'version':(0,8),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
@@ -114,9 +114,6 @@ class AirFoil:
             self.__upper.reverse()
         if self.__lower[0][0] > self.__lower[-1][0]:
             self.__lower.reverse()
-        
-        if self.__upper[0][0] != 0: self.__upper.insert(0,(0.,0.))
-        if self.__lower[0][0] != 0: self.__lower.insert(0,(0.,0.))
     
     def __hinterpolate(self):
         """Process of interpolation using piecewise hermite curve interpolation"""
@@ -124,6 +121,11 @@ class AirFoil:
         # Temp. Data holders
         upperint = []
         lowerint = []
+        
+        # Dont like this, because here we insert points into the rawdata
+        # But it creates consisitent results in the interpolation results
+        if self.__upper[0][0] != 0: self.__upper.insert(0,(0.,0.))
+        if self.__lower[0][0] != 0: self.__lower.insert(0,(0.,0.))
         
         # Create points
         if self.__interpolation_method == "l":
@@ -202,7 +204,11 @@ class AirFoil:
                     
     def getRawPoints(self):
         """Return Raw Points"""
-        return self.__RawPoints
+        
+        self.__airfoilSplit()
+        self.__upper.reverse()
+        Raw_points = self.__upper + self.__lower
+        return Raw_points
     
     def getProcPoints(self):
         """Return Generated Points"""
@@ -231,30 +237,38 @@ class bpyAirfoil(Operator):
         verts = []
         faces = []
         
-        for F in afl_sorted:
-            FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution,interp_method=sce.airfoil_interpolation_method)
-            FF.processFoil()
-            F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
-            F.verts.pop()
-            verts.extend(F.verts)
-            F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
-            F.faces.append((0,1,len(F.verts)-1,0)) # Add Tip Triangle
-            if not sce.airfoil_blend:
-                createMesh(FF.FoilName,F.verts,Faces=F.faces)
+        if sce.airfoil_interpolate:
+            for F in afl_sorted:
+                FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution,interp_method=sce.airfoil_interpolation_method)
+                FF.processFoil()
+                F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
+                F.verts.pop()
+                verts.extend(F.verts)
+                F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
+                F.faces.append((0,1,len(F.verts)-1,0)) # Add Tip Triangle
+                if not sce.airfoil_blend:
+                    createMesh(FF.FoilName,F.verts,Faces=F.faces)
 
-        if sce.airfoil_blend:
-            # Cap the first end of the airfoil
-            faces.extend(afl_sorted[0].faces)
-            # Cap the last airfoil
-            R = (len(afl_sorted)-1) * sce.airfoil_resolution * 2
-            faces.extend([(x+R,y+R,z+R,w+R) for x,y,z,w in afl_sorted[-1].faces])
-            # Create the blended surfaces between airfoils
-            airfoil_blending_faces = [(i+sce.airfoil_resolution*2*j,i+1+sce.airfoil_resolution*2*j,i+1+(j+1)*sce.airfoil_resolution*2,i+(j+1)*sce.airfoil_resolution*2) \
-            for j in range(len(afl_sorted)-1) \
-            for i in range(sce.airfoil_resolution*2-1)]
-            faces.extend(airfoil_blending_faces)
-            createMesh("Blended Airfoil",verts,Faces=faces)
-
+            if sce.airfoil_blend:
+                # Cap the first end of the airfoil
+                faces.extend(afl_sorted[0].faces)
+                # Cap the last airfoil
+                R = (len(afl_sorted)-1) * sce.airfoil_resolution * 2
+                faces.extend([(x+R,y+R,z+R,w+R) for x,y,z,w in afl_sorted[-1].faces])
+                # Create the blended surfaces between airfoils
+                airfoil_blending_faces = [(i+sce.airfoil_resolution*2*j,i+1+sce.airfoil_resolution*2*j,i+1+(j+1)*sce.airfoil_resolution*2,i+(j+1)*sce.airfoil_resolution*2) \
+                for j in range(len(afl_sorted)-1) \
+                for i in range(sce.airfoil_resolution*2-1)]
+                faces.extend(airfoil_blending_faces)
+                createMesh("Blended Airfoil",verts,Faces=faces)
+        
+        else:
+            for F in afl_sorted:
+                FF = AirFoil(F.file_name)
+                F.verts = [(x,F.loc_y,z) for x,z in FF.getRawPoints()]
+                F.faces = [(n,n+1,len(F.verts)-n-1,n) for n in range(len(F.verts)-1)]
+                createMesh(FF.FoilName+" (RAW)",F.verts,Faces=F.faces)
+        
         return {'FINISHED'}
 
 # Panel Class Definition
@@ -297,16 +311,20 @@ class Airfoil_Panel(Panel):
         layout = self.layout
         scn = context.scene
         
-        layout.label("Interpolation Method")
-        
         row = layout.row(align=True)
-        row.prop(scn,'airfoil_interpolation_method')
+        row.prop(scn,'airfoil_interpolate')
         
-        row = layout.row(align=True)
-        row.prop(scn,'airfoil_resolution')
+        if scn.airfoil_interpolate:
+            layout.label("Interpolation Method")
+            
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_interpolation_method')
+            
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_resolution')
 
-        row = layout.row(align=True)
-        row.prop(scn,'airfoil_blend')
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_blend')
         
         layout.label("Airfoil List")
         row = layout.row()
@@ -347,6 +365,7 @@ def register():
     bpy.types.Scene.airfoil_collection_idx = IntProperty(min=-1, max=100, default=-1)
     bpy.types.Scene.airfoil_resolution = IntProperty(name="Resolution",default=100, min=10, max=1000)
     bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils",default=False,description="Blend Airfoils into single wing")
+    bpy.types.Scene.airfoil_interpolate = BoolProperty(name="Interpolate Airfoils",default=False,description="Interpolate airfoils (required to blend airfoils)")
     bpy.types.Scene.airfoil_interpolation_method = EnumProperty(name="",items=interp_method_list)
     
     # Add Template_list methods
