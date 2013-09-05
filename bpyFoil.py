@@ -33,7 +33,7 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,9),
+            'version':(0,9,1),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
@@ -240,7 +240,7 @@ class bpyAirfoil(Operator):
         t = sce.airfoil_collection_ratio
         d = sce.airfoil_collection_dihedral
         s = sce.airfoil_collection_sweep
-        w = sce.airfoil_collection_wash_angle
+
         res = sce.airfoil_resolution
         ip = sce.airfoil_interpolation_method
         
