@@ -25,6 +25,7 @@ a surface with the points
 
 import bpy
 import re, random
+import math as M
 from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty, EnumProperty
 
@@ -32,7 +33,7 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,8),
+            'version':(0,9),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
@@ -47,6 +48,10 @@ def createMesh(objname,Vert,Edges=[],Faces=[]):
     
     me.from_pydata(Vert,Edges,Faces)
     me.update(calc_edges=True)
+
+def scale(p,c,t,y,ymax):
+    th = (ymax-y)/ymax + y/ymax*t
+    return (p-c)*th+c
 
 def getAirfoilName(filename):
     try:
@@ -231,6 +236,14 @@ class bpyAirfoil(Operator):
         sce = context.scene
         afl = sce.airfoil_collection
         
+        # Simplify the constants for wing generation
+        t = sce.airfoil_collection_ratio
+        d = sce.airfoil_collection_dihedral
+        s = sce.airfoil_collection_sweep
+        w = sce.airfoil_collection_wash_angle
+        res = sce.airfoil_resolution
+        ip = sce.airfoil_interpolation_method
+        
         afl_filter = [a for a in afl if a.use and a.file_name]
         afl_sorted = sorted(afl_filter,key=lambda x:x.loc_y)
         
@@ -238,10 +251,18 @@ class bpyAirfoil(Operator):
         faces = []
         
         if sce.airfoil_interpolate:
+            
+            maxF_loc_y = max(afl_sorted,key=lambda x:x.loc_y).loc_y
+            
             for F in afl_sorted:
-                FF = AirFoil(F.file_name,Resolution=sce.airfoil_resolution,interp_method=sce.airfoil_interpolation_method)
+                FF = AirFoil(F.file_name,Resolution=res,interp_method=ip)
                 FF.processFoil()
-                F.verts = [(x,F.loc_y,z) for x,z in FF.getProcPoints()]
+                
+                F.verts = [(scale(x,0.5,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(s/180*M.pi)),\
+                    F.loc_y,\
+                    scale(z,0,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(d/180*M.pi)))\
+                    for x,z in FF.getProcPoints()]
+                
                 F.verts.pop()
                 verts.extend(F.verts)
                 F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
@@ -256,9 +277,9 @@ class bpyAirfoil(Operator):
                 R = (len(afl_sorted)-1) * sce.airfoil_resolution * 2
                 faces.extend([(x+R,y+R,z+R,w+R) for x,y,z,w in afl_sorted[-1].faces])
                 # Create the blended surfaces between airfoils
-                airfoil_blending_faces = [(i+sce.airfoil_resolution*2*j,i+1+sce.airfoil_resolution*2*j,i+1+(j+1)*sce.airfoil_resolution*2,i+(j+1)*sce.airfoil_resolution*2) \
-                for j in range(len(afl_sorted)-1) \
-                for i in range(sce.airfoil_resolution*2-1)]
+                airfoil_blending_faces = [(i+res*2*j,i+1+res*2*j,i+1+(j+1)*res*2,i+(j+1)*res*2) \
+                    for j in range(len(afl_sorted)-1) \
+                    for i in range(res*2-1)]
                 faces.extend(airfoil_blending_faces)
                 createMesh("Blended Airfoil",verts,Faces=faces)
         
@@ -283,6 +304,7 @@ class Airfoil_Collection_add(Operator):
         afl = sce.airfoil_collection
         
         new_airfoil = afl.add()
+        sce.airfoil_collection_idx = max(afl,key=lambda x:x.loc_y).loc_y
         
         return {'FINISHED'}
 
@@ -326,6 +348,14 @@ class Airfoil_Panel(Panel):
             row = layout.row(align=True)
             row.prop(scn,'airfoil_blend')
         
+        if scn.airfoil_interpolate and scn.airfoil_blend:
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_collection_sweep')        
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_collection_dihedral')
+            row = layout.row(align=True)
+            row.prop(scn,'airfoil_collection_ratio')
+        
         layout.label("Airfoil List")
         row = layout.row()
         row.template_list('Airfoil_UL_List','airfoil_collection_id',scn,"airfoil_collection",scn,"airfoil_collection_idx",rows=5)
@@ -367,6 +397,10 @@ def register():
     bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils",default=False,description="Blend Airfoils into single wing")
     bpy.types.Scene.airfoil_interpolate = BoolProperty(name="Interpolate Airfoils",default=False,description="Interpolate airfoils (required to blend airfoils)")
     bpy.types.Scene.airfoil_interpolation_method = EnumProperty(name="",items=interp_method_list)
+    
+    bpy.types.Scene.airfoil_collection_sweep = FloatProperty(name="Sweep Angle",default=0.0,min=-60.0,max=60.0,description="Sweep Angle of Wing")
+    bpy.types.Scene.airfoil_collection_dihedral = FloatProperty(name="Dihedral Angle",default=0.0,min=-60.0,max=60.0,description="Dihedral Angle of Wing")
+    bpy.types.Scene.airfoil_collection_ratio = FloatProperty(name="Taper Ratio",default=1.0,min=0.01,max=10)
     
     # Add Template_list methods
     bpy.utils.register_class(Airfoil_Collection_add)
