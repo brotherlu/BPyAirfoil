@@ -24,7 +24,7 @@ a surface with the points
 """
 
 import bpy
-import re, random
+import re
 import math as M
 from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty, EnumProperty
@@ -33,7 +33,7 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,9,1),
+            'version':(0,9,2),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
@@ -100,14 +100,15 @@ class AirFoil:
         
     def __airfoilSplit(self):
         """Process to divide the foildata to upper and lower sections"""
-        # Find the chord coordiantes
-        trailing = min(self.__RawPoints,key=lambda x:x[0])
-        leading = max(self.__RawPoints,key=lambda x:x[0])
-        
-        # Find chord coordinates index
-        trailingloc = self.__RawPoints.index(trailing)
-        leadingloc = self.__RawPoints.index(leading)
-        splitloc = leadingloc if 0 < leadingloc < len(self.__RawPoints)-3 else trailingloc
+        FoilGrad = [(self.__RawPoints[i][0]-self.__RawPoints[i+1][0]) for i in range(len(self.__RawPoints)-1)]
+
+        for i in range(len(FoilGrad)-1):
+            if FoilGrad[i]>=0.>=FoilGrad[i+1]:
+                splitloc = i
+                break
+            elif FoilGrad[i]<=0.<=FoilGrad[i+1]:
+                splitloc = i
+                break
         
         # Split the airfoil along chord
         self.__upper = self.__RawPoints[:splitloc+1]
@@ -206,7 +207,7 @@ class AirFoil:
         if lowerint[-1][0] != 1.0: lowerint.append((1.0,0.0))
 
         self.__ProcPoints = upperint + lowerint
-                    
+    
     def getRawPoints(self):
         """Return Raw Points"""
         
@@ -252,7 +253,10 @@ class bpyAirfoil(Operator):
         
         if sce.airfoil_interpolate:
             
-            maxF_loc_y = max(afl_sorted,key=lambda x:x.loc_y).loc_y
+            if len(afl)>1:
+                maxF_loc_y = max(afl_sorted,key=lambda x:x.loc_y).loc_y
+            else:
+                maxF_loc_y = 1
             
             for F in afl_sorted:
                 FF = AirFoil(F.file_name,Resolution=res,interp_method=ip)
