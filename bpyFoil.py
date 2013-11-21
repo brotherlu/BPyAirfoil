@@ -33,7 +33,7 @@ bl_info =   {
             'name':'Blender Airfoil Importer',
             'category':'Object',
             'author':'Louay Cheikh',
-            'version':(0,9,2),
+            'version':(0,9,3),
             'blender':(2,67,0),
             'location':'Tool Properties sidepanel'
             }
@@ -64,20 +64,18 @@ def getAirfoilName(filename):
 # Airfoil Class
 
 class AirFoil:
-    def __init__(self,FoilName,Resolution=250,interp_method="l"):
-        
-        FF = open(FoilName,'r')
-        data = FF.readlines()
+    def __init__(self,Foil,Resolution=250,interp_method="l"):
         
         # Create the regexp for finding the data
         r = re.compile('[.\S]*\.[0-9]*')
         # Get FoilName from the file
-        self.FoilName = data[0].strip()
+        self.FoilName = Foil[0].strip()
         # Create the coordintes from the regler exp
-        FoilCoords = [r.findall(x) for x in data[1:]]
+        FoilCoords = [r.findall(x) for x in Foil[1:]]
         # Convert the strings to Floats
         self.__RawPoints = [(float(x[0]),float(x[1])) for x in FoilCoords if len(x)==2 ]
         # Ensure the First point is not the Point Count that some DAT files include
+ 
         if self.__RawPoints[0][0]>1: self.__RawPoints.remove(self.__RawPoints[0])
         
         self.__ProcPoints = []
@@ -88,6 +86,13 @@ class AirFoil:
     
     def __str__(self):
         return "Airfoil Process Object, Last Processed: %s" % (self.FoilName)
+
+    @classmethod
+    def fromFile(cls,Foil,Resolution=250,interp_method="l"):
+        FF = open(Foil,'r')
+        data = FF.readlines()
+        return cls(data,Resolution,interp_method)
+
 
     def processFoil(self):
         """Process Airfoils to Generate Points for Multisection solids"""
@@ -104,21 +109,29 @@ class AirFoil:
 
         for i in range(len(FoilGrad)-1):
             if FoilGrad[i]>=0.>=FoilGrad[i+1]:
-                splitloc = i
+                if FoilGrad[i+1]<=0.<=FoilGrad[i+2]:
+                    splitloc = i+1
+                else:
+                    splitloc = i
                 break
             elif FoilGrad[i]<=0.<=FoilGrad[i+1]:
-                splitloc = i
+                if FoilGrad[i+1]>=0.>=FoilGrad[i+2]:
+                    splitloc = i+1
+                else:
+                    splitloc = i
                 break
+        
+        print(FoilGrad)
         
         # Split the airfoil along chord
         self.__upper = self.__RawPoints[:splitloc+1]
         self.__lower = self.__RawPoints[splitloc+1:]
-        
+
         # Ensure each section starts at (0,0)->(1,0)
         # NOTE: we do NOT SORT the points because we want to insure that the order is preserved
-        if self.__upper[0][0] > self.__upper[-1][0]:
+        if self.__upper[1][0] > self.__upper[-2][0]:
             self.__upper.reverse()
-        if self.__lower[0][0] > self.__lower[-1][0]:
+        if self.__lower[1][0] > self.__lower[-2][0]:
             self.__lower.reverse()
     
     def __hinterpolate(self):
@@ -167,11 +180,15 @@ class AirFoil:
         # Reverse match pairs to insure no index errors
         matchU.reverse()
         matchL.reverse()
-        
+
+#        print(self.__lower)
+#        print(xpointsL)
         # Pop xpoints that dont require interpolation and append the point into the upperint list
         for i in matchU:
             xpointsU.pop(i[0])
             upperint.append(self.__upper[i[1]])
+        
+#        print(matchL)
         
         # Same process as above but for lower airfoil
         for i in matchL:
@@ -241,39 +258,49 @@ class bpyAirfoil(Operator):
         t = sce.airfoil_collection_ratio
         d = sce.airfoil_collection_dihedral
         s = sce.airfoil_collection_sweep
-
         res = sce.airfoil_resolution
         ip = sce.airfoil_interpolation_method
         
+        # Sorting data that is going to be processed
         afl_filter = [a for a in afl if a.use and a.file_name]
         afl_sorted = sorted(afl_filter,key=lambda x:x.loc_y)
         
+        # Empty Initial lists
         verts = []
         faces = []
         
+        # Begin Processing
         if sce.airfoil_interpolate:
             
+            # Find the tip of the defined wing
             if len(afl)>1:
                 maxF_loc_y = max(afl_sorted,key=lambda x:x.loc_y).loc_y
             else:
                 maxF_loc_y = 1
             
+            # Get and start processing the files
             for F in afl_sorted:
-                FF = AirFoil(F.file_name,Resolution=res,interp_method=ip)
+                FF = AirFoil.fromFile(F.file_name,Resolution=res,interp_method=ip)
                 FF.processFoil()
                 
+                # Process the generated verts to scale, and translate each points correctly
+                # this can be done more elegentally but will be done in later versions
                 F.verts = [(scale(x,0.5,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(s/180*M.pi)),\
                     F.loc_y,\
                     scale(z,0,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(d/180*M.pi)))\
                     for x,z in FF.getProcPoints()]
-                
+                # Pop the first point becuase the first point (1,0) is defined twice
                 F.verts.pop()
+                # Place the points in the verts array
                 verts.extend(F.verts)
+                # Generate the faces for the quads
                 F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
-                F.faces.append((0,1,len(F.verts)-1,0)) # Add Tip Triangle
+                # Add Tip Triangle
+                F.faces.append((0,1,len(F.verts)-1,0))
+                # If blending is not required then just insert the airfoils without skinning
                 if not sce.airfoil_blend:
                     createMesh(FF.FoilName,F.verts,Faces=F.faces)
-
+            # If the skinning is required 
             if sce.airfoil_blend:
                 # Cap the first end of the airfoil
                 faces.extend(afl_sorted[0].faces)
@@ -289,7 +316,7 @@ class bpyAirfoil(Operator):
         
         else:
             for F in afl_sorted:
-                FF = AirFoil(F.file_name)
+                FF = AirFoil.fromFile(F.file_name)
                 F.verts = [(x,F.loc_y,z) for x,z in FF.getRawPoints()]
                 F.faces = [(n,n+1,len(F.verts)-n-1,n) for n in range(len(F.verts)-1)]
                 createMesh(FF.FoilName+" (RAW)",F.verts,Faces=F.faces)
