@@ -1,22 +1,22 @@
 #  bpyFoil.py
-#  
+#
 #  Copyright 2013 Louay Cheikh <brotherlu@gmail.com>
-#  
+#
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  This program is distributed in the hope that it will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
-#  
+#
 
 """
 bpyFoil is intended to import airfoil DAT files into blender and create
@@ -30,13 +30,13 @@ from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty, EnumProperty
 
 bl_info = {   
-        'name': 'Blender Airfoil Importer',
-        'category': 'Object',
-        'author': 'Louay Cheikh',
-        'version': (0, 9, 4),
-        'blender': (2, 83, 1),
-        'location': 'Tool Properties sidepanel'
-        }
+    'name': 'Blender Airfoil Importer',
+    'category': 'Object',
+    'author': 'Louay Cheikh',
+    'version': (0, 9, 4),
+    'blender': (2, 83, 1),
+    'location': 'Tool Properties sidepanel'
+}
 
 interp_method_list = [("p", "Polynomial Interpolation", "Polynomial Interpolation using a second order distribution of points (recommended)"), ("l", "Linear Interpolation", "Interpolate using a linear distribution of points")]
 
@@ -46,14 +46,14 @@ def createMesh(objname, Vert, Edges=[], Faces=[]):
     me = bpy.data.meshes.new(objname)
     ob = bpy.data.objects.new(objname, me)
     bpy.context.scene.objects.link(ob)
-    
+
     me.from_pydata(Vert, Edges, Faces)
     me.update(calc_edges=True)
 
 
 def scale(p, c, t, y, ymax):
-    th = (ymax-y)/ymax + y/ymax*t
-    return (p-c)*th+c
+    th = (ymax - y) / ymax + y / ymax * t
+    return (p - c) * th + c
 
 
 def getAirfoilName(filename):
@@ -69,7 +69,7 @@ def getAirfoilName(filename):
 
 class AirFoil:
     def __init__(self, Foil, Resolution=250, interp_method="l"):
-        
+
         # Create the regexp for finding the data
         r = re.compile("[.\S]*\.[0-9]*")
         # Get FoilName from the file
@@ -77,11 +77,12 @@ class AirFoil:
         # Create the coordintes from the regler exp
         FoilCoords = [r.findall(x) for x in Foil[1:]]
         # Convert the strings to Floats
-        self.__RawPoints = [(float(x[0]), float(x[1])) for x in FoilCoords if len(x)==2]
+        self.__RawPoints = [(float(x[0]), float(x[1])) for x in FoilCoords if len(x) == 2]
 
         # Ensure the First point is not the Point Count that some DAT files include
- 
-        if self.__RawPoints[0][0] > 1: self.__RawPoints.remove(self.__RawPoints[0])
+
+        if self.__RawPoints[0][0] > 1: 
+            self.__RawPoints.remove(self.__RawPoints[0])
         
         self.__ProcPoints = []
         self.__upper = []
@@ -109,27 +110,25 @@ class AirFoil:
         
     def __airfoilSplit(self):
         """Process to divide the foildata to upper and lower sections"""
-        FoilGrad = [(self.__RawPoints[i][0]-self.__RawPoints[i+1][0]) for i in range(len(self.__RawPoints)-1)]
+        FoilGrad = [(self.__RawPoints[i][0] - self.__RawPoints[i+1][0]) for i in range(len(self.__RawPoints) - 1)]
 
-        for i in range(len(FoilGrad)-1):
-            if FoilGrad[i]>=0.>=FoilGrad[i+1]:
-                if FoilGrad[i+1]<=0.<=FoilGrad[i+2]:
-                    splitloc = i+1
+        for i in range(len(FoilGrad) - 1):
+            if FoilGrad[i] >= 0. >= FoilGrad[i + 1]:
+                if FoilGrad[i + 1] <= 0. <= FoilGrad[i + 2]:
+                    splitloc = i + 1
                 else:
                     splitloc = i
                 break
-            elif FoilGrad[i]<=0.<=FoilGrad[i+1]:
-                if FoilGrad[i+1]>=0.>=FoilGrad[i+2]:
-                    splitloc = i+1
+            elif FoilGrad[i] <= 0. <= FoilGrad[i + 1]:
+                if FoilGrad[i + 1] >= 0. >= FoilGrad[i + 2]:
+                    splitloc = i + 1
                 else:
                     splitloc = i
                 break
-        
-        print(FoilGrad)
         
         # Split the airfoil along chord
-        self.__upper = self.__RawPoints[:splitloc+1]
-        self.__lower = self.__RawPoints[splitloc+1:]
+        self.__upper = self.__RawPoints[:splitloc + 1]
+        self.__lower = self.__RawPoints[splitloc + 1:]
 
         # Ensure each section starts at (0,0)->(1,0)
         # NOTE: we do NOT SORT the points because we want to insure that the order is preserved
@@ -137,19 +136,21 @@ class AirFoil:
             self.__upper.reverse()
         if self.__lower[1][0] > self.__lower[-2][0]:
             self.__lower.reverse()
-    
+
     def __hinterpolate(self):
         """Process of interpolation using piecewise hermite curve interpolation"""
-        
+
         # Temp. Data holders
         upperint = []
         lowerint = []
-        
+
         # Dont like this, because here we insert points into the rawdata
         # But it creates consisitent results in the interpolation results
-        if self.__upper[0][0] != 0: self.__upper.insert(0, (0., 0.))
-        if self.__lower[0][0] != 0: self.__lower.insert(0, (0., 0.))
-        
+        if self.__upper[0][0] != 0: 
+            self.__upper.insert(0, (0., 0.))
+        if self.__lower[0][0] != 0:
+            self.__lower.insert(0, (0., 0.))
+
         # Create points
         if self.__interpolation_method == "l":
             xpointsU = list(map(lambda x: x/float(self.__procPointsCount), range(0, self.__procPointsCount+1)))
