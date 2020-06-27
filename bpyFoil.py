@@ -45,10 +45,11 @@ def createMesh(objname, Vert, Edges=[], Faces=[]):
     """Helper Function to Create Meshes"""
     me = bpy.data.meshes.new(objname)
     ob = bpy.data.objects.new(objname, me)
-    bpy.context.scene.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob)
 
     me.from_pydata(Vert, Edges, Faces)
     me.update(calc_edges=True)
+    me.validate()
 
 
 def scale(p, c, t, y, ymax):
@@ -243,7 +244,7 @@ class AirFoil:
 
 
 # Operator Class
-class bpyAirfoil(Operator):
+class AIRFOIL_OT_bpyAirfoil(Operator):
     """ Addon to import airfoil Dat files """
     bl_idname = "object.bpyairfoil"
     bl_label = "Airfoil DAT File Importer"
@@ -326,7 +327,7 @@ class bpyAirfoil(Operator):
 
 
 # Panel Class Definition
-class Airfoil_Collection_add(Operator):
+class AIRFOIL_OT_Collection_add(Operator):
     bl_idname = "airfoil_collection.add"
     bl_label = "Add Airfoil"
     bl_description = "Add Airfoil"
@@ -341,7 +342,7 @@ class Airfoil_Collection_add(Operator):
         return {'FINISHED'}
 
 
-class Airfoil_Collection_del(Operator):
+class AIRFOIL_OT_Collection_del(Operator):
     bl_idname = "airfoil_collection.remove"
     bl_label = "Remove Airfoil"
     bl_description = "Remove Airfoil"
@@ -358,10 +359,10 @@ class Airfoil_Collection_del(Operator):
 
 
 # Airfoil Tool Panel 
-class Airfoil_Panel(Panel):
+class AIRFOIL_PT_Panel(Panel):
     bl_label = "Airfoil Tools Panel"
     bl_space_type = "VIEW_3D"
-    bl_region_type = "TOOL_PROPS"
+    bl_region_type = "UI"
     
     def draw(self, context):
         layout = self.layout
@@ -371,7 +372,7 @@ class Airfoil_Panel(Panel):
         row.prop(scn, 'airfoil_interpolate')
         
         if scn.airfoil_interpolate:
-            layout.label("Interpolation Method")
+            layout.label(text="Interpolation Method")
             
             row = layout.row(align=True)
             row.prop(scn, 'airfoil_interpolation_method')
@@ -390,13 +391,13 @@ class Airfoil_Panel(Panel):
             row = layout.row(align=True)
             row.prop(scn, 'airfoil_collection_ratio')
         
-        layout.label("Airfoil List")
+        layout.label(text="Airfoil List")
         row = layout.row()
-        row.template_list('Airfoil_UL_List', 'airfoil_collection_id', scn, "airfoil_collection", scn, "airfoil_collection_idx", rows=5)
+        row.template_list('AIRFOIL_UL_List', 'airfoil_collection_id', scn, "airfoil_collection", scn, "airfoil_collection_idx", rows=5)
         
         col = row.column(align=True)
-        col.operator('airfoil_collection.add', text="", icon="ZOOMIN")
-        col.operator('airfoil_collection.remove', text="", icon="ZOOMOUT")
+        col.operator('airfoil_collection.add', text="", icon="ADD")
+        col.operator('airfoil_collection.remove', text="", icon="REMOVE")
         
         if len(scn.airfoil_collection) > 0:
             airfoil_item = scn.airfoil_collection[scn.airfoil_collection_idx]
@@ -408,13 +409,13 @@ class Airfoil_Panel(Panel):
 
 # Create Airfoil List Classes    
 class AirfoilListItem(PropertyGroup):
-    file_name = StringProperty(name="Filename", subtype="FILE_PATH", description="DAT file location")
-    use = BoolProperty(name="Enable", default=True, description="Enable Foil")
-    loc_y = FloatProperty(name="Distance from root", min=0.0, default=0.0)
+    file_name: StringProperty(name="Filename", subtype="FILE_PATH", description="DAT file location")
+    use: BoolProperty(name="Enable", default=True, description="Enable Foil")
+    loc_y: FloatProperty(name="Distance from root", min=0.0, default=0.0)
 
 
 # Template list draw_item Class
-class Airfoil_UL_List(UIList):
+class AIRFOIL_UL_List(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.label(text=getAirfoilName(item.file_name) if item else "", translate=False)
@@ -440,23 +441,24 @@ def register():
     bpy.types.Scene.airfoil_collection_ratio = FloatProperty(name="Taper Ratio", default=1.0, min=0.01, max=10)
     
     # Add Template_list methods
-    bpy.utils.register_class(Airfoil_Collection_add)
-    bpy.utils.register_class(Airfoil_Collection_del)
-    bpy.utils.register_class(Airfoil_UL_List)
+    bpy.utils.register_class(AIRFOIL_OT_Collection_add)
+    bpy.utils.register_class(AIRFOIL_OT_Collection_del)
+    bpy.utils.register_class(AIRFOIL_UL_List)
     
     # Register Operator
-    bpy.utils.register_class(bpyAirfoil)
-    bpy.utils.register_class(Airfoil_Panel)
+    bpy.utils.register_class(AIRFOIL_OT_bpyAirfoil)
+    bpy.utils.register_class(AIRFOIL_PT_Panel)
 
 
 def unregister():
     """ Unregister all Classes """
     bpy.utils.unregister_class(AirfoilListItem)
-    bpy.utils.unregister_class(Airfoil_Collection_add)
-    bpy.utils.unregister_class(Airfoil_Collection_del)
+    bpy.utils.unregister_class(AIRFOIL_OT_Collection_add)
+    bpy.utils.unregister_class(AIRFOIL_OT_Collection_del)
+    bpy.utils.unregister_class(AIRFOIL_UL_List)
     
-    bpy.utils.unregister_class(bpyAirfoil)
-    bpy.utils.unregister_class(Airfoil_Panel)
+    bpy.utils.unregister_class(AIRFOIL_OT_bpyAirfoil)
+    bpy.utils.unregister_class(AIRFOIL_PT_Panel)
 
 
 if __name__ == "__main__":
