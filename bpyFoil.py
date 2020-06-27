@@ -29,54 +29,59 @@ import math as M
 from bpy.types import Operator, Panel, PropertyGroup, UIList
 from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionProperty, FloatProperty, EnumProperty
 
-bl_info =   {   
-            'name':'Blender Airfoil Importer',
-            'category':'Object',
-            'author':'Louay Cheikh',
-            'version':(0,9,3),
-            'blender':(2,67,0),
-            'location':'Tool Properties sidepanel'
-            }
+bl_info = {   
+        'name': 'Blender Airfoil Importer',
+        'category': 'Object',
+        'author': 'Louay Cheikh',
+        'version': (0, 9, 4),
+        'blender': (2, 83, 1),
+        'location': 'Tool Properties sidepanel'
+        }
 
-interp_method_list = [("p","Polynomial Interpolation","Polynomial Interpolation using a second order distribution of points (recommended)"),("l","Linear Interpolation","Interpolate using a linear distribution of points")]
+interp_method_list = [("p", "Polynomial Interpolation", "Polynomial Interpolation using a second order distribution of points (recommended)"), ("l", "Linear Interpolation", "Interpolate using a linear distribution of points")]
 
-def createMesh(objname,Vert,Edges=[],Faces=[]):
+
+def createMesh(objname, Vert, Edges=[], Faces=[]):
     """Helper Function to Create Meshes"""
     me = bpy.data.meshes.new(objname)
-    ob = bpy.data.objects.new(objname,me)
+    ob = bpy.data.objects.new(objname, me)
     bpy.context.scene.objects.link(ob)
     
-    me.from_pydata(Vert,Edges,Faces)
+    me.from_pydata(Vert, Edges, Faces)
     me.update(calc_edges=True)
 
-def scale(p,c,t,y,ymax):
+
+def scale(p, c, t, y, ymax):
     th = (ymax-y)/ymax + y/ymax*t
     return (p-c)*th+c
 
+
 def getAirfoilName(filename):
     try:
-        f = open(filename,'r')
+        f = open(filename, 'r')
         filename = f.readline()
         return filename.strip()
-    except:
+    except Exception:
         return "UNDEFINED"
+
 
 # Airfoil Class
 
 class AirFoil:
-    def __init__(self,Foil,Resolution=250,interp_method="l"):
+    def __init__(self, Foil, Resolution=250, interp_method="l"):
         
         # Create the regexp for finding the data
-        r = re.compile('[.\S]*\.[0-9]*')
+        r = re.compile("[.\S]*\.[0-9]*")
         # Get FoilName from the file
         self.FoilName = Foil[0].strip()
         # Create the coordintes from the regler exp
         FoilCoords = [r.findall(x) for x in Foil[1:]]
         # Convert the strings to Floats
-        self.__RawPoints = [(float(x[0]),float(x[1])) for x in FoilCoords if len(x)==2 ]
+        self.__RawPoints = [(float(x[0]), float(x[1])) for x in FoilCoords if len(x)==2]
+
         # Ensure the First point is not the Point Count that some DAT files include
  
-        if self.__RawPoints[0][0]>1: self.__RawPoints.remove(self.__RawPoints[0])
+        if self.__RawPoints[0][0] > 1: self.__RawPoints.remove(self.__RawPoints[0])
         
         self.__ProcPoints = []
         self.__upper = []
@@ -88,11 +93,10 @@ class AirFoil:
         return "Airfoil Process Object, Last Processed: %s" % (self.FoilName)
 
     @classmethod
-    def fromFile(cls,Foil,Resolution=250,interp_method="l"):
-        FF = open(Foil,'r')
+    def fromFile(cls, Foil, Resolution=250, interp_method="l"):
+        FF = open(Foil, 'r')
         data = FF.readlines()
-        return cls(data,Resolution,interp_method)
-
+        return cls(data, Resolution, interp_method)
 
     def processFoil(self):
         """Process Airfoils to Generate Points for Multisection solids"""
@@ -143,13 +147,13 @@ class AirFoil:
         
         # Dont like this, because here we insert points into the rawdata
         # But it creates consisitent results in the interpolation results
-        if self.__upper[0][0] != 0: self.__upper.insert(0,(0.,0.))
-        if self.__lower[0][0] != 0: self.__lower.insert(0,(0.,0.))
+        if self.__upper[0][0] != 0: self.__upper.insert(0, (0., 0.))
+        if self.__lower[0][0] != 0: self.__lower.insert(0, (0., 0.))
         
         # Create points
         if self.__interpolation_method == "l":
-            xpointsU = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
-            xpointsL = list(map(lambda x:x/float(self.__procPointsCount),range(0,self.__procPointsCount+1)))
+            xpointsU = list(map(lambda x: x/float(self.__procPointsCount), range(0, self.__procPointsCount+1)))
+            xpointsL = list(map(lambda x: x/float(self.__procPointsCount), range(0, self.__procPointsCount+1)))
         elif self.__interpolation_method == "p":
             xpointsU = [x**2/float(self.__procPointsCount)**2 for x in range(self.__procPointsCount+1)]
             xpointsL = [x**2/float(self.__procPointsCount)**2 for x in range(self.__procPointsCount+1)]
@@ -159,12 +163,12 @@ class AirFoil:
         lowersec = [(self.__lower[i+1][1]-self.__lower[i][1])/(self.__lower[i+1][0]-self.__lower[i][0]) for i in range(len(self.__lower)-1)]
         
         # Calculate tangents
-        uppertan = [(uppersec[k-1]+uppersec[k])/2 for k in range(1,len(uppersec))]
-        uppertan.insert(0,uppersec[0])
+        uppertan = [(uppersec[k-1]+uppersec[k])/2 for k in range(1, len(uppersec))]
+        uppertan.insert(0, uppersec[0])
         uppertan.append(uppersec[-1])
 
-        lowertan = [(lowersec[k-1]+lowersec[k])/2 for k in range(1,len(lowersec))]
-        lowertan.insert(0,lowersec[0])
+        lowertan = [(lowersec[k-1]+lowersec[k])/2 for k in range(1, len(lowersec))]
+        lowertan.insert(0, lowersec[0])
         lowertan.append(lowersec[-1])
         
         # Hermite blending functions
@@ -174,21 +178,17 @@ class AirFoil:
         m1 = lambda t: t**3 - t**2
         
         # Find matching points to improve accuarcy
-        matchU = [(i,j) for i in range(len(xpointsU)) for j in range(len(self.__upper)) if xpointsU[i] == self.__upper[j][0]]
-        matchL = [(i,j) for i in range(len(xpointsL)) for j in range(len(self.__lower)) if xpointsL[i] == self.__lower[j][0]]
+        matchU = [(i, j) for i in range(len(xpointsU)) for j in range(len(self.__upper)) if xpointsU[i] == self.__upper[j][0]]
+        matchL = [(i, j) for i in range(len(xpointsL)) for j in range(len(self.__lower)) if xpointsL[i] == self.__lower[j][0]]
         
         # Reverse match pairs to insure no index errors
         matchU.reverse()
         matchL.reverse()
 
-#        print(self.__lower)
-#        print(xpointsL)
         # Pop xpoints that dont require interpolation and append the point into the upperint list
         for i in matchU:
             xpointsU.pop(i[0])
             upperint.append(self.__upper[i[1]])
-        
-#        print(matchL)
         
         # Same process as above but for lower airfoil
         for i in matchL:
@@ -201,8 +201,8 @@ class AirFoil:
                 if self.__upper[i][0] < xp < self.__upper[i+1][0]:
                     h = self.__upper[i+1][0]-self.__upper[i][0]
                     t = (xp - self.__upper[i][0]) / h
-                    solution = ( p0(t)*self.__upper[i][1] + h*m0(t)*uppertan[i] + p1(t)*self.__upper[i+1][1] + h*m1(t)*uppertan[i+1] )
-                    upperint.append((xp,solution))
+                    solution = (p0(t)*self.__upper[i][1] + h*m0(t)*uppertan[i] + p1(t)*self.__upper[i+1][1] + h*m1(t)*uppertan[i+1])
+                    upperint.append((xp, solution))
         
         # Interpolate lower points
         for xp in xpointsL:
@@ -210,18 +210,18 @@ class AirFoil:
                 if self.__lower[i][0] < xp < self.__lower[i+1][0]:
                     h = self.__lower[i+1][0]-self.__lower[i][0]
                     t = (xp - self.__lower[i][0]) / h
-                    solution = ( p0(t)*self.__lower[i][1] + h*m0(t)*lowertan[i] + p1(t)*self.__lower[i+1][1] + h*m1(t)*lowertan[i+1] )
-                    lowerint.append((xp,solution))
+                    solution = (p0(t)*self.__lower[i][1] + h*m0(t)*lowertan[i] + p1(t)*self.__lower[i+1][1] + h*m1(t)*lowertan[i+1])
+                    lowerint.append((xp, solution))
         
         # Sort the points to keep the correct sequence
-        upperint.sort(key=lambda x:x[0], reverse=True)
-        lowerint.sort(key=lambda x:x[0])
+        upperint.sort(key=lambda x: x[0], reverse=True)
+        lowerint.sort(key=lambda x: x[0])
         
         # Do checks to insure no duplicates
-        if upperint[0][0] != 1.0: upperint.insert(0,(1.0,0.0))
-        if upperint[-1][0] != 0.0: upperint.append((0.0,0.0))
+        if upperint[0][0] != 1.0: upperint.insert(0, (1.0, 0.0))
+        if upperint[-1][0] != 0.0: upperint.append((0.0, 0.0))
         if lowerint[0][0] == 0.0: lowerint.pop(0)
-        if lowerint[-1][0] != 1.0: lowerint.append((1.0,0.0))
+        if lowerint[-1][0] != 1.0: lowerint.append((1.0, 0.0))
 
         self.__ProcPoints = upperint + lowerint
     
@@ -240,13 +240,13 @@ class AirFoil:
             return
         return self.__ProcPoints
 
-# Operator Class
 
+# Operator Class
 class bpyAirfoil(Operator):
     """ Addon to import airfoil Dat files """
     bl_idname = "object.bpyairfoil"
     bl_label = "Airfoil DAT File Importer"
-    bl_options = {'REGISTER','UNDO'}
+    bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         """ Import """
@@ -263,7 +263,7 @@ class bpyAirfoil(Operator):
         
         # Sorting data that is going to be processed
         afl_filter = [a for a in afl if a.use and a.file_name]
-        afl_sorted = sorted(afl_filter,key=lambda x:x.loc_y)
+        afl_sorted = sorted(afl_filter, key=lambda x: x.loc_y)
         
         # Empty Initial lists
         verts = []
@@ -274,85 +274,87 @@ class bpyAirfoil(Operator):
             
             # Find the tip of the defined wing
             if len(afl)>1:
-                maxF_loc_y = max(afl_sorted,key=lambda x:x.loc_y).loc_y
+                maxF_loc_y = max(afl_sorted, key=lambda x: x.loc_y).loc_y
             else:
                 maxF_loc_y = 1
             
             # Get and start processing the files
             for F in afl_sorted:
-                FF = AirFoil.fromFile(F.file_name,Resolution=res,interp_method=ip)
+                FF = AirFoil.fromFile(F.file_name, Resolution=res, interp_method=ip)
                 FF.processFoil()
                 
                 # Process the generated verts to scale, and translate each points correctly
                 # this can be done more elegentally but will be done in later versions
-                F.verts = [(scale(x,0.5,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(s/180*M.pi)),\
+                F.verts = [(scale(x, 0.5, t, F.loc_y, maxF_loc_y)+(F.loc_y*M.tan(s/180*M.pi)),\
                     F.loc_y,\
-                    scale(z,0,t,F.loc_y,maxF_loc_y)+(F.loc_y*M.tan(d/180*M.pi)))\
-                    for x,z in FF.getProcPoints()]
+                    scale(z, 0, t, F.loc_y, maxF_loc_y)+(F.loc_y*M.tan(d/180*M.pi)))\
+                    for x, z in FF.getProcPoints()]
                 # Pop the first point becuase the first point (1,0) is defined twice
                 F.verts.pop()
                 # Place the points in the verts array
                 verts.extend(F.verts)
                 # Generate the faces for the quads
-                F.faces = [(i,i+1,len(F.verts)-1*(i+1),len(F.verts)-1*i) for i in range(1,int(len(F.verts)/2))]
+                F.faces = [(i, i+1, len(F.verts)-1*(i+1), len(F.verts)-1*i) for i in range(1, int(len(F.verts)/2))]
                 # Add Tip Triangle
-                F.faces.append((0,1,len(F.verts)-1,0))
+                F.faces.append((0, 1, len(F.verts)-1, 0))
                 # If blending is not required then just insert the airfoils without skinning
                 if not sce.airfoil_blend:
-                    createMesh(FF.FoilName,F.verts,Faces=F.faces)
+                    createMesh(FF.FoilName, F.verts, Faces=F.faces)
             # If the skinning is required 
             if sce.airfoil_blend:
                 # Cap the first end of the airfoil
                 faces.extend(afl_sorted[0].faces)
                 # Cap the last airfoil
                 R = (len(afl_sorted)-1) * sce.airfoil_resolution * 2
-                faces.extend([(x+R,y+R,z+R,w+R) for x,y,z,w in afl_sorted[-1].faces])
+                faces.extend([(x+R, y+R, z+R, w+R) for x, y, z, w in afl_sorted[-1].faces])
                 # Create the blended surfaces between airfoils
-                airfoil_blending_faces = [(i+res*2*j,i+1+res*2*j,i+1+(j+1)*res*2,i+(j+1)*res*2) \
+                airfoil_blending_faces = [(i+res*2*j, i+1+res*2*j, i+1+(j+1)*res*2, i+(j+1)*res*2) \
                     for j in range(len(afl_sorted)-1) \
                     for i in range(res*2-1)]
                 faces.extend(airfoil_blending_faces)
-                createMesh("Blended Airfoil",verts,Faces=faces)
+                createMesh("Blended Airfoil", verts, Faces=faces)
         
         else:
             for F in afl_sorted:
                 FF = AirFoil.fromFile(F.file_name)
-                F.verts = [(x,F.loc_y,z) for x,z in FF.getRawPoints()]
-                F.faces = [(n,n+1,len(F.verts)-n-1,n) for n in range(len(F.verts)-1)]
-                createMesh(FF.FoilName+" (RAW)",F.verts,Faces=F.faces)
+                F.verts = [(x, F.loc_y, z) for x, z in FF.getRawPoints()]
+                F.faces = [(n, n+1, len(F.verts)-n-1, n) for n in range(len(F.verts)-1)]
+                createMesh(FF.FoilName+" (RAW)", F.verts, Faces=F.faces)
         
         return {'FINISHED'}
 
-# Panel Class Definition
 
+# Panel Class Definition
 class Airfoil_Collection_add(Operator):
     bl_idname = "airfoil_collection.add"
     bl_label = "Add Airfoil"
     bl_description = "Add Airfoil"
     
-    def invoke(self,context,event):
+    def invoke(self, context, event):
         sce = context.scene
         afl = sce.airfoil_collection
         
-        new_airfoil = afl.add()
-        sce.airfoil_collection_idx = max(afl,key=lambda x:x.loc_y).loc_y
+        afl.add()
+        sce.airfoil_collection_idx = max(afl, key=lambda x: x.loc_y).loc_y
         
         return {'FINISHED'}
+
 
 class Airfoil_Collection_del(Operator):
     bl_idname = "airfoil_collection.remove"
     bl_label = "Remove Airfoil"
     bl_description = "Remove Airfoil"
     
-    def invoke(self,context,event):
+    def invoke(self, context, event):
         sce = context.scene
         afl = sce.airfoil_collection
         
         if sce.airfoil_collection_idx >= 0:
             afl.remove(sce.airfoil_collection_idx)
-            sce.airfoil_collection_idx-=1
+            sce.airfoil_collection_idx -= 1
         
         return {'FINISHED'}
+
 
 # Airfoil Tool Panel 
 class Airfoil_Panel(Panel):
@@ -360,61 +362,64 @@ class Airfoil_Panel(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOL_PROPS"
     
-    def draw(self,context):
+    def draw(self, context):
         layout = self.layout
         scn = context.scene
         
         row = layout.row(align=True)
-        row.prop(scn,'airfoil_interpolate')
+        row.prop(scn, 'airfoil_interpolate')
         
         if scn.airfoil_interpolate:
             layout.label("Interpolation Method")
             
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_interpolation_method')
+            row.prop(scn, 'airfoil_interpolation_method')
             
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_resolution')
+            row.prop(scn, 'airfoil_resolution')
 
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_blend')
+            row.prop(scn, 'airfoil_blend')
         
         if scn.airfoil_interpolate and scn.airfoil_blend:
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_collection_sweep')        
+            row.prop(scn, 'airfoil_collection_sweep')        
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_collection_dihedral')
+            row.prop(scn, 'airfoil_collection_dihedral')
             row = layout.row(align=True)
-            row.prop(scn,'airfoil_collection_ratio')
+            row.prop(scn, 'airfoil_collection_ratio')
         
         layout.label("Airfoil List")
         row = layout.row()
-        row.template_list('Airfoil_UL_List','airfoil_collection_id',scn,"airfoil_collection",scn,"airfoil_collection_idx",rows=5)
+        row.template_list('Airfoil_UL_List', 'airfoil_collection_id', scn, "airfoil_collection", scn, "airfoil_collection_idx", rows=5)
         
         col = row.column(align=True)
-        col.operator('airfoil_collection.add',text="",icon="ZOOMIN")
-        col.operator('airfoil_collection.remove',text="",icon="ZOOMOUT")
+        col.operator('airfoil_collection.add', text="", icon="ZOOMIN")
+        col.operator('airfoil_collection.remove', text="", icon="ZOOMOUT")
         
         if len(scn.airfoil_collection) > 0:
             airfoil_item = scn.airfoil_collection[scn.airfoil_collection_idx]
-            layout.prop(airfoil_item,'file_name')
-            layout.prop(airfoil_item,'loc_y')
+            layout.prop(airfoil_item, 'file_name')
+            layout.prop(airfoil_item, 'loc_y')
             
-            layout.operator("object.bpyairfoil",text="Import Airfoils",icon="MESH_DATA")
+            layout.operator("object.bpyairfoil", text="Import Airfoils", icon="MESH_DATA")
+
 
 # Create Airfoil List Classes    
 class AirfoilListItem(PropertyGroup):
     file_name = StringProperty(name="Filename", subtype="FILE_PATH", description="DAT file location")
-    use = BoolProperty(name="Enable",default=True,description="Enable Foil")
-    loc_y = FloatProperty(name="Distance from root",min=0.0,default=0.0)
+    use = BoolProperty(name="Enable", default=True, description="Enable Foil")
+    loc_y = FloatProperty(name="Distance from root", min=0.0, default=0.0)
+
 
 # Template list draw_item Class
 class Airfoil_UL_List(UIList):
-    def draw_item(self,context,layout,data,item,icon,active_data,active_propname,index):
-        if self.layout_type in {'DEFAULT','COMPACT'}:
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.label(text=getAirfoilName(item.file_name) if item else "", translate=False)
             layout.label(text=str(item.loc_y))
-            layout.prop(item,"use",text="")
+            layout.prop(item, "use", text="")
+
 
 def register():
     """ Register all Classes """
@@ -424,14 +429,14 @@ def register():
     bpy.types.Scene.airfoil_collection_id = IntProperty()
     bpy.types.Scene.airfoil_collection = CollectionProperty(type=AirfoilListItem)
     bpy.types.Scene.airfoil_collection_idx = IntProperty(min=-1, max=100, default=-1)
-    bpy.types.Scene.airfoil_resolution = IntProperty(name="Resolution",default=100, min=10, max=1000)
-    bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils",default=False,description="Blend Airfoils into single wing")
-    bpy.types.Scene.airfoil_interpolate = BoolProperty(name="Interpolate Airfoils",default=False,description="Interpolate airfoils (required to blend airfoils)")
-    bpy.types.Scene.airfoil_interpolation_method = EnumProperty(name="",items=interp_method_list)
+    bpy.types.Scene.airfoil_resolution = IntProperty(name="Resolution", default=100, min=10, max=1000)
+    bpy.types.Scene.airfoil_blend = BoolProperty(name="Blend Airfoils", default=False, description="Blend Airfoils into single wing")
+    bpy.types.Scene.airfoil_interpolate = BoolProperty(name="Interpolate Airfoils", default=False, description="Interpolate airfoils (required to blend airfoils)")
+    bpy.types.Scene.airfoil_interpolation_method = EnumProperty(name="", items=interp_method_list)
     
-    bpy.types.Scene.airfoil_collection_sweep = FloatProperty(name="Sweep Angle",default=0.0,min=-60.0,max=60.0,description="Sweep Angle of Wing")
-    bpy.types.Scene.airfoil_collection_dihedral = FloatProperty(name="Dihedral Angle",default=0.0,min=-60.0,max=60.0,description="Dihedral Angle of Wing")
-    bpy.types.Scene.airfoil_collection_ratio = FloatProperty(name="Taper Ratio",default=1.0,min=0.01,max=10)
+    bpy.types.Scene.airfoil_collection_sweep = FloatProperty(name="Sweep Angle", default=0.0, min=-60.0, max=60.0, description="Sweep Angle of Wing")
+    bpy.types.Scene.airfoil_collection_dihedral = FloatProperty(name="Dihedral Angle", default=0.0, min=-60.0, max=60.0, description="Dihedral Angle of Wing")
+    bpy.types.Scene.airfoil_collection_ratio = FloatProperty(name="Taper Ratio", default=1.0, min=0.01, max=10)
     
     # Add Template_list methods
     bpy.utils.register_class(Airfoil_Collection_add)
@@ -442,6 +447,7 @@ def register():
     bpy.utils.register_class(bpyAirfoil)
     bpy.utils.register_class(Airfoil_Panel)
 
+
 def unregister():
     """ Unregister all Classes """
     bpy.utils.unregister_class(AirfoilListItem)
@@ -450,6 +456,7 @@ def unregister():
     
     bpy.utils.unregister_class(bpyAirfoil)
     bpy.utils.unregister_class(Airfoil_Panel)
+
 
 if __name__ == "__main__":
     register()
