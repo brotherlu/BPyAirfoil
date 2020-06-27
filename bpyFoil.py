@@ -320,7 +320,7 @@ class AIRFOIL_OT_bpyAirfoil(Operator):
             for F in afl_sorted:
                 FF = AirFoil.fromFile(F.file_name)
                 F.verts = [(x, F.loc_y, z) for x, z in FF.getRawPoints()]
-                F.faces = [(n, n+1, len(F.verts)-n-1, n) for n in range(len(F.verts)-1)]
+                F.faces = [(i, i+1, len(F.verts)-1*(i+1), len(F.verts)-1*i) for i in range(1, int(len(F.verts)/2))]
                 createMesh(FF.FoilName+" (RAW)", F.verts, Faces=F.faces)
         
         return {'FINISHED'}
