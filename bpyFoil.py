@@ -81,10 +81,12 @@ class AirFoil:
         self.__RawPoints = [(float(x[0]), float(x[1])) for x in FoilCoords if len(x) == 2]
 
         # Ensure the First point is not the Point Count that some DAT files include
-
         if self.__RawPoints[0][0] > 1: 
             self.__RawPoints.remove(self.__RawPoints[0])
-        
+
+        # Remove Duplicate points
+        self.__RawPoints = list(dict.fromkeys(self.__RawPoints))
+
         self.__ProcPoints = []
         self.__upper = []
         self.__lower = []
@@ -298,7 +300,7 @@ class AIRFOIL_OT_bpyAirfoil(Operator):
                 # Generate the faces for the quads
                 F.faces = [(i, i+1, len(F.verts)-1*(i+1), len(F.verts)-1*i) for i in range(1, int(len(F.verts)/2))]
                 # Add Tip Triangle
-                F.faces.append((0, 1, len(F.verts)-1, 0))
+                F.faces.append((0, 1, len(F.verts), 0))
                 # If blending is not required then just insert the airfoils without skinning
                 if not sce.airfoil_blend:
                     createMesh(FF.FoilName, F.verts, Faces=F.faces)
@@ -319,9 +321,21 @@ class AIRFOIL_OT_bpyAirfoil(Operator):
         else:
             for F in afl_sorted:
                 FF = AirFoil.fromFile(F.file_name)
+
                 F.verts = [(x, F.loc_y, z) for x, z in FF.getRawPoints()]
-                F.faces = [(i, i+1, len(F.verts)-1*(i+1), len(F.verts)-1*i) for i in range(1, int(len(F.verts)/2))]
-                createMesh(FF.FoilName+" (RAW)", F.verts, Faces=F.faces)
+
+                c = len(F.verts)
+
+                F.edges = [(x, x + 1) for x in range(c + 1)]
+                F.edges.extend([(x, c - x - 1) for x in range(0, int(c / 2))])
+
+                F.faces = [(i, i + 1, c - i - 2, c - i - 1) for i in range(0, int(c / 2))]
+
+                # Odd number of points so we need to add a leading triangle
+                if c % 2:
+                    F.faces.append((c / 2 - 1, c / 2, c / 2 + 1))
+                
+                createMesh(FF.FoilName+" (RAW)", F.verts, F.edges, Faces=F.faces)
         
         return {'FINISHED'}
 
@@ -332,7 +346,7 @@ class AIRFOIL_OT_Collection_add(Operator):
     bl_label = "Add Airfoil"
     bl_description = "Add Airfoil"
     
-    def invoke(self, context, event):
+    def invoke(self, context, event):   
         sce = context.scene
         afl = sce.airfoil_collection
         
