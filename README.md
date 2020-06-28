@@ -13,7 +13,7 @@ The plugin is simple to use, and clear.
 
 It can be found under the UI Tools Panel of the 3D View
 
-![Location]("screenshot.png")
+![Location](screenshot.png)
 
 ## Installation
 
