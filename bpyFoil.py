@@ -53,6 +53,7 @@ def createMesh(objname, Vert, Edges=[], Faces=[]):
 
 
 def scale(p, c, t, y, ymax):
+    ymax = ymax if ymax else 1
     th = (ymax - y) / ymax + y / ymax * t
     return (p - c) * th + c
 
@@ -293,14 +294,11 @@ class AIRFOIL_OT_bpyAirfoil(Operator):
                     F.loc_y,\
                     scale(z, 0, t, F.loc_y, maxF_loc_y)+(F.loc_y*M.tan(d/180*M.pi)))\
                     for x, z in FF.getProcPoints()]
-                # Pop the first point becuase the first point (1,0) is defined twice
-                F.verts.pop()
                 # Place the points in the verts array
                 verts.extend(F.verts)
                 # Generate the faces for the quads
                 F.faces = [(i, i+1, len(F.verts)-1*(i+1), len(F.verts)-1*i) for i in range(1, int(len(F.verts)/2))]
-                # Add Tip Triangle
-                F.faces.append((0, 1, len(F.verts), 0))
+
                 # If blending is not required then just insert the airfoils without skinning
                 if not sce.airfoil_blend:
                     createMesh(FF.FoilName, F.verts, Faces=F.faces)
@@ -375,8 +373,10 @@ class AIRFOIL_OT_Collection_del(Operator):
 # Airfoil Tool Panel 
 class AIRFOIL_PT_Panel(Panel):
     bl_label = "Airfoil Tools Panel"
+    bl_idname = "AIRFOIL_PT_Panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
+    bl_category = "BPyFoil"
     
     def draw(self, context):
         layout = self.layout
