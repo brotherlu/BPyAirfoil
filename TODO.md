@@ -23,3 +23,6 @@ NACA 4 Series generator
 
 ## v0.9
 Goals Forthcoming
+
+## v0.91
+Support for Blender 2.83 LTS
