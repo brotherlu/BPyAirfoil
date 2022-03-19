@@ -349,7 +349,7 @@ class AIRFOIL_OT_Collection_add(Operator):
         afl = sce.airfoil_collection
         
         afl.add()
-        sce.airfoil_collection_idx = max(afl, key=lambda x: x.loc_y).loc_y
+        sce.airfoil_collection_idx = int(max(afl, key=lambda x: x.loc_y).loc_y)
         
         return {'FINISHED'}
 
